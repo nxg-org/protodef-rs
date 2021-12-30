@@ -1,0 +1,332 @@
+//! The module responsible for using provided native functions to
+//! build a tokentree from a pds NamespaceTree
+//! 
+//! 
+//! 
+
+
+
+
+
+
+
+
+
+
+/// # main thinking point
+/// we have a [`super::pds::ProtoDef`]
+/// and want to get out a block of source code ([`proc_macro2::TokenStream`])
+/// 
+/// # detailed analysis of input
+/// [`super::pds::ProtoDef`] is a HashMap of Paths (
+///   - folders representing modules
+///   - `types` node being left out
+///   - filename being the type name itself
+/// ) mapping onto [`super::pds::Type`]s
+/// 
+/// # what should output really look like?
+/// 
+/// - every namespace should map to
+/// ```
+/// pub mod namespace {
+///    // types here
+/// }
+/// ```
+/// 
+/// - every [Container Type](super::pds::Type::Container) should map to
+/// ```
+/// pub struct TypeName {
+///     // fields here
+/// }
+/// ```
+/// 
+/// ## field mapping
+/// 
+/// - every field if it is a struct should map to
+/// ```
+/// pub struct TypeName_FieldName{
+///     // subfields here
+/// }
+/// ```
+/// 
+/// - every field if it is an enum should map to
+/// ```
+/// pub enum TypeName_FieldName{
+///     // cases here
+/// }
+/// ```
+/// 
+/// ### enum cases
+/// 
+/// - enum cases of native types (like u64) or aliases should map to
+/// ```
+/// pub enum TypeName_FieldName{
+///     U64(u64),
+///     I64(i64),
+///     // more cases...
+/// }
+/// ```
+/// 
+/// - enum cases which are structs should map to
+/// ```
+/// pub enum TypeName_FieldName{
+///     StructName{
+///         // fields here
+///     }
+///     // more cases...
+/// }
+/// ```
+/// 
+/// - enum cases which are enum cases should map to
+/// ```
+/// pub enum TypeName_FieldName{
+///     EnumCaseName(TypeName_FieldName_EnumCaseName),
+///     // more cases...
+/// }
+/// 
+/// pub enum TypeName_FieldName_EnumCaseName{
+///     U64(u64),
+///     StructName{
+///         // fields here
+///     }
+/// }
+/// ```
+/// 
+/// 
+/// 
+/// 
+/// 
+/// 
+pub type Plan = String;
+
+
+
+
+use indexmap::IndexMap;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
+
+
+/// a context to construct container trees which can become your structs
+pub type ContainerContext = IndexMap<PathBuf, Type>;
+
+/// the function that generates a function which you can call
+/// to make it add its [`Type`] to your [`ContainerContext`]
+pub struct TypeGenFnGenFn<'ret>(pub Box<dyn Fn() -> TypeGenFn<'ret> + Sync>);
+
+/// the options you can pass to the function that generates your types
+pub type TypeGenFnOptions = Option<serde_json::Value>;
+
+/// the function that generates your types
+pub type TypeGenFn<'ret> = Box<
+    dyn FnOnce(
+        TypeGenContext<'_>,
+        Cx<'_, StructBuilder>,
+        TypeGenFnOptions,
+    ) -> Option<TypeGenFnGenFn<'ret>>,
+>;
+
+/// the options you have to pass to the compilation function
+pub type TypeName = String;
+pub type FieldName = String;
+pub type TypeDefinitionCode = proc_macro2::TokenStream;
+pub type SerializationCode = proc_macro2::TokenStream;
+pub type DeserializationCode = proc_macro2::TokenStream;
+
+/// the function to which you pass its final [`TypeName`] and [`FieldName`], which
+/// will return code for its packet
+/// ([de](DeserializationCode))[serialization](SerializationCode)
+pub type CompilationFunction = Box<dyn Fn(FieldName) -> (SerializationCode, DeserializationCode)>;
+
+/// a type represents a node in the [`ContainerContext`]
+pub struct Type {
+    /// the compile function is used to get code from a type
+    pub compile: CompilationFunction,
+    /// the rust type is used to identify different types and check them for equality
+    pub rst: RustType,
+}
+
+pub struct Cx<'a, Tree, P: AsRef<Path> = PathBuf> {
+    pub tree: &'a mut Tree,
+    pub path: P,
+}
+
+pub struct TypeGenContext<'a> {
+    pub pds: &'a mut super::pds::ProtoDef,
+    pub path: PathBuf,
+    pub types: &'a mut HashMap<PathBuf, Type>,
+}
+
+pub type StructBuilder = IndexMap<PathBuf, Type>;
+
+/// used to check different types for equality
+pub enum RustType {
+    Struct(HashMap<String, RustType>),
+    Enum(Vec<RustType>),
+    Option(Box<RustType>),
+    Single(proc_macro2::Ident),
+}
+
+pub type Natives<'a> = HashMap<&'a str, TypeGenFnGenFn<'a>>;
+
+pub fn get_hm_of_code_gen_fn<'a>(
+    pds: &'a mut super::pds::ProtoDef,
+    natives: &'static Natives<'a>,
+) -> HashMap<PathBuf, Type> {
+    let mut ret = <HashMap<PathBuf, Type>>::default();
+
+    for (path, pds_type) in pds.typemap.clone() {
+        match pds_type {
+            super::pds::Type::Reference(native) if native == "native" => {
+                let mut sb = StructBuilder::default();
+                let sb_cx = Cx {
+                    tree: &mut sb,
+                    path: "/".into(),
+                };
+                natives
+                    .get(path.file_name().unwrap().to_str().unwrap())
+                    .unwrap()
+                    .to_owned()
+                    .0()(
+                    TypeGenContext {
+                        pds,
+                        path,
+                        types: &mut ret,
+                    },
+                    sb_cx,
+                    None,
+                );
+            }
+            super::pds::Type::Reference(string) => {
+                lookup_ref(
+                    &Cx {
+                        tree: pds,
+                        path: path.to_owned(),
+                    },
+                    &string,
+                );
+            }
+            super::pds::Type::Container(fields) => {
+                for field in fields {
+                    // type_with_cx_and_natives_to_type_gen_fn(Cx{tree: pds, path: path.to_owned()}, field.r#type, natives)();
+                    
+                }
+            }
+            super::pds::Type::Call(mut call_type, options) => {
+                // let cg_fn = pds_to_gen_type(
+                //     Cx {
+                //         tree: pds,
+                //         path: path.to_owned(),
+                //     },
+                //     call_type.as_mut().to_owned(),
+                //     natives,
+                // );
+                // let mut types = Default::default();
+                // let tg_cx = TypeGenContext {
+                //     pds,
+                //     path,
+                //     types: &mut types,
+                // };
+                // let mut sb = StructBuilder::default();
+                // cg_fn.0()(
+                //     tg_cx,
+                //     Cx {
+                //         tree: &mut sb,
+                //         path: "/".into(),
+                //     },
+                //     Some(options),
+                // );
+            }
+        }
+    }
+    ret
+}
+
+pub fn lookup_ref(
+    cx: &Cx<super::pds::ProtoDef>,
+    t_name: &str,
+) -> Option<(super::pds::Type, PathBuf)> {
+    for ancestor in cx.path.ancestors() {
+        let mut type_path = ancestor.to_path_buf();
+        type_path.push(&t_name);
+        if let Some(t) = cx.tree.typemap.get(&type_path) {
+            return Some((t.to_owned(), type_path));
+        }
+    }
+    None
+}
+
+// fn pds_to_gen_type<'a>(
+//     cx: Cx<'_, super::pds::ProtoDef>,
+//     r#type: super::pds::Type,
+//     natives: &'static Natives<'a>,
+// ) -> Type {
+//     match r#type {
+//         super::pds::Type::Reference(native) if native == "native" => {
+//             let native_name = cx.path.file_name().unwrap().to_str().unwrap().to_string();
+//             let func = &<&TypeGenFnGenFn>::clone(
+//                 &natives
+//                     .get(&native_name[..])
+//                     .unwrap_or_else(|| panic!("couldn't resolve native type '{:#}'", native_name)),
+//             )
+//             .0;
+//             Type{
+//                 compile: TypeGenFnGenFn(Box::new(move || func())),
+//                 rst: todo!(),
+//             }
+            
+//         }
+//         super::pds::Type::Reference(type_name) => {
+//             let (t, t_path) = lookup_ref(&cx, &type_name).unwrap_or_else(|| {
+//                 panic!(
+//                     "couldn't resolve reference '{}' at namespace path {:?}",
+//                     type_name, &cx.path
+//                 )
+//             });
+//             pds_to_gen_type(
+//                 Cx {
+//                     tree: cx.tree,
+//                     path: t_path,
+//                 },
+//                 t,
+//                 natives,
+//             )
+//         }
+//         super::pds::Type::Call(call_type, options) => {
+//             // let tgen_fn = type_with_cx_and_natives_to_type_gen_fn(cx, *call_type, natives);
+//             // tgen_fn.0(cx, )
+//             let cg_fn = pds_to_gen_type(
+//                 Cx {
+//                     tree: cx.tree,
+//                     path: cx.path.clone(),
+//                 },
+//                 call_type.as_ref().to_owned(),
+//                 natives,
+//             );
+//             let mut types = Default::default();
+//             let tg_cx = TypeGenContext {
+//                 pds: cx.tree,
+//                 path: cx.path,
+//                 types: &mut types,
+//             };
+//             let mut sb = StructBuilder::default();
+//             cg_fn.0()(
+//                 tg_cx,
+//                 Cx {
+//                     tree: &mut sb,
+//                     path: "/".into(),
+//                 },
+//                 Some(options),
+//             )
+//             .expect("called type did not return a type definition which takes options.")
+//         }
+//         super::pds::Type::Container(_) => {
+//             panic!(
+//                 "container output doesn't take any arguments. namespace path '{:?}'",
+//                 &cx.path
+//             );
+//         }
+//     }
+// }

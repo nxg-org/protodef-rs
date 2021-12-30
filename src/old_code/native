@@ -1,0 +1,143 @@
+
+// lazy_static::lazy_static!(
+//     pub static ref BUILTIN_NATIVES: Natives<'static> = {
+//         let mut ret = HashMap::default();
+
+//         macro_rules! get_natives {
+//             ($($native_name:expr => $native_fun_name:ident $buf_getter:ident $buf_putter:ident $rstype:expr)+) => {
+//                 $(
+//                     fn $native_fun_name<'ret>(
+//                         _: TypeGenContext<'_>,
+//                         structbuilder_cx: Cx<'_, StructBuilder>,
+//                         _: Option<serde_json::Value>,
+//                     ) -> Option<NativeLike<'ret>> {
+//                         structbuilder_cx.tree.insert(
+//                             structbuilder_cx.path,
+//                             Type{
+//                                 compile: Rc::new(|type_name, field_name| {
+//                                     (
+//                                         quote::quote! {
+//                                             let #field_name: $rstype = buf.$buf_getter();
+//                                         },
+//                                         quote::quote! {
+//                                             buf.$buf_putter(#field_name);
+//                                         },
+//                                         quote::quote! {
+//                                             pub type #type_name = $rstype;
+//                                         }
+//                                     )
+//                                 }),
+//                                 rst: RustType::Single(proc_macro2::Ident::new($rstype, proc_macro2::Span::call_site()))
+//                             }
+//                         );
+//                         None
+//                     }
+//                     ret.insert($native_name, NativeLike(Box::new(||Box::new(&$native_fun_name))));
+//                 )*
+//             };
+//         }
+
+//         get_natives!(
+//             "varint" => native_varint get_var_int put_var_int "i32"
+//             "varlong" => native_varlong get_var_long put_var_long "i64"
+//             "u8"  => native_u8 get_u8 put_u8 "u8"
+//             "i8"  => native_i8 get_i8 put_i8 "i8"
+//             "u16" => native_u16 get_u16 put_u16 "u16"
+//             "i16" => native_i16 get_i16 put_i16 "i16"
+//             "u32" => native_u32 get_u32 put_u32 "u32"
+//             "i32" => native_i32 get_i32 put_i32 "i32"
+//             "u64" => native_u64 get_u64 put_u64 "u64"
+//             "i64" => native_i64 get_i64 put_i64 "i64"
+//             "u128" => native_u128 get_u128 put_u128 "u128"
+//             "i128" => native_i128 get_i128 put_i128 "i128"
+//             "f32" => native_f32 get_f32 put_f32 "f32"
+//             "f64" => native_f64 get_f64 put_f64 "f64"
+//             "boolean" => native_bool get_bool put_bool "bool"
+//         );
+//         ret.insert("switch", NativeLike(Box::new(||Box::new(native_switch))));
+
+//         ret
+//     };
+// );
+
+// fn native_switch<'ret>(
+//     typegencx: TypeGenContext<'_>,
+//     _structbuilder_cx: Cx<'_, StructBuilder>,
+//     opt: Option<serde_json::Value>,
+// ) -> Option<NativeLike<'ret>> {
+//     macro_rules! error {
+//         ($typegencx:ident $reason:expr) => {
+//             || panic!("['switch' call at '{:?}'] {}", &$typegencx.path, $reason)
+//         };
+//     }
+//     let raw_options = opt.unwrap_or_else(error!(typegencx "no options provided"));
+//     let options = raw_options
+//         .as_object()
+//         .unwrap_or_else(error!(typegencx "options passed aren't an object"));
+//     let mut placeholder_arguments: HashMap<String, String> = Default::default();
+//     let mut add_placeholder_arg = |old: &str, dollar_ref: &String| {
+//         placeholder_arguments.insert(dollar_ref[1..].to_string(), old.to_owned());
+//     };
+//     let mut enum_code = proc_macro2::TokenStream::default();
+//     match options.get("compareTo") {
+//         Some(serde_json::Value::String(s)) if s.starts_with('$') => {
+//             add_placeholder_arg("compareTo", s)
+//         }
+//         Some(serde_json::Value::String(s)) => {
+//             let _field_name = s;
+//             let fields = options
+//                 .get("fields")
+//                 .unwrap_or_else(error!(typegencx "fields not passed"))
+//                 .as_object()
+//                 .unwrap_or_else(error!(typegencx "fields passed aren't an object"));
+//             enum_code.extend(quote::quote! {
+//                 match r#type
+//             });
+//             for (_field_matcher, _field_type) in fields {
+//                 todo!("compareTo switch code")
+//                 // let (field_type, field_path) = todo!();
+//                 // // lookup_type(field_type, ...);
+//                 // enum_code.extend(quote::quote! { #field_matcher => { } });
+//             }
+//         }
+//         _ => match options.get("compareToValue") {
+//             Some(serde_json::Value::String(s)) if s.starts_with('$') => {
+//                 add_placeholder_arg("compareToValue", s)
+//             }
+//             Some(serde_json::Value::String(ident)) => {
+//                 todo!("compareToValue switch code");
+//             }
+//             _ => error!(typegencx "neither passed compareTo nor compareToValue in options")(),
+//         },
+//     }
+//     if !placeholder_arguments.is_empty() {
+//         Some(NativeLike(Box::new(move || {
+//             let mut raw_options = raw_options.clone();
+//             let placeholder_arguments = placeholder_arguments.clone();
+//             Box::new(
+//                 move |typegencx: TypeGenContext<'_>,
+//                       structbuilder_cx: Cx<'_, StructBuilder>,
+//                       opts: Option<serde_json::Value>| {
+//                     let placeholder_options =
+//                         opts.unwrap_or_else(error!(typegencx "did not pass options to alias call"));
+//                     for (alias, insertto) in &placeholder_arguments {
+//                         if let Some(obj) = raw_options.as_object_mut() {
+//                             obj.insert(
+//                                 insertto.to_owned(),
+//                                 placeholder_options
+//                                     .get(alias)
+//                                     .unwrap_or_else(
+//                                         error!(typegencx format!("could not find to {} aliased property {} in options", alias, insertto))
+//                                     )
+//                                     .to_owned(),
+//                             );
+//                         }
+//                     }
+//                     native_switch(typegencx, structbuilder_cx, Some(raw_options))
+//                 },
+//             )
+//         })))
+//     } else {
+//         None
+//     }
+// }

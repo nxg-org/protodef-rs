@@ -5,9 +5,10 @@ use std::collections::HashMap;
 pub type ProtoDef = Namespace;
 
 /**
- * ProtoDef Namespaces
- * <https://github.com/ProtoDef-io/ProtoDef/blob/master/doc/protocol.md#protocol>
- * directly taken from the protocol.json files found in minecraft-data
+ * [`ProtoDef Namespaces`] directly taken from protocol.json files,
+ * subnamespaces are in the flattened `sub` HashMap
+ *
+ * [`ProtoDef Namespaces`]: https://github.com/ProtoDef-io/ProtoDef/blob/master/doc/protocol.md#protocol
  */
 #[derive(Clone, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct Namespace {
