@@ -29,7 +29,7 @@
           "kind": "bin"
         }
       },
-      "args": ["-f", "test.json", "/sub_1/abc"],
+      "args": ["test.json", "/sub_1/abc"],
       "cwd": "${workspaceFolder}"
     },
     {

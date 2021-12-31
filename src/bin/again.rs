@@ -1,11 +1,10 @@
-use std::{collections::HashMap, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
-use protodef_rs::gen::{TypeStore, Type};
+use protodef_rs::gen::{Type, TypeStore};
 
 #[derive(Parser)]
 struct App {
-    #[clap(short)]
     pub file: PathBuf,
     pub nstree: String,
 }
@@ -41,22 +40,44 @@ fn main() {
             .get(&(iter.next().unwrap().to_owned(), type_name.to_owned()))
             .unwrap(),
     )
-    .unwrap() {
+    .unwrap()
+    {
         protodef_rs::gen::GetGenTypeResult::Done(t) => t,
-        protodef_rs::gen::GetGenTypeResult::ReExport(_) => panic!("got reexport when expected type"),
+        protodef_rs::gen::GetGenTypeResult::ReExport(_) => {
+            panic!("got reexport when expected type")
+        }
     };
 
-    println!("TYPE: {:?}", rst);
+    println!("TYPE: {:#?}", rst);
     println!(
         "SER_CODE: {}",
-        ser_code_gen_fn(Box::new(Rc::new("INSERT_IDENTIFIER_HERE".to_owned())), 0)
+        ser_code_gen_fn("INSERT_IDENTIFIER_HERE".to_owned().into())
     );
     println!(
         "DE_CODE: {}",
-        de_code_gen_fn(Box::new(Rc::new("INSERT_IDENTIFIER_HERE".to_owned())), 0)
+        de_code_gen_fn("INSERT_IDENTIFIER_HERE".to_owned().into())
     );
     println!(
         "DEF_CODE: {}",
-        def_code_gen_fn(Box::new(Rc::new("INSERT_IDENTIFIER_HERE".to_owned())), 0)
+        def_code_gen_fn("INSERT_IDENTIFIER_HERE".to_owned().into())
     );
 }
+
+// fn a() {
+//     let InsertIdentifierHere_A {
+//         a: __a,
+//         c: __c,
+//         b: __b,
+//     } = _a;
+//     buf.put_var_int(__c);
+//     buf.put_u64(__a);
+//     buf.put_u8(__b);
+//     let InsertIdentifierHere_B {
+//         a: __a,
+//         b: __b,
+//         c: __c,
+//     } = _b;
+//     buf.put_var_int(__c);
+//     buf.put_u64(__a);
+//     buf.put_u8(__b);
+// }

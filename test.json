@@ -11,6 +11,19 @@
                 "container",
                 [
                     {
+                        "name": "a",
+                        "type": "abc1"
+                    },
+                    {
+                        "name": "b",
+                        "type": "abc1"
+                    }
+                ]
+            ],
+            "abc1": [
+                "container",
+                [
+                    {
                         "anon": true,
                         "type": [
                             "container",

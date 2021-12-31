@@ -26,21 +26,14 @@ lazy_static::lazy_static!(
                         }
                         GetGenTypeResult::Done(Type {
                             rst: RustType::Simple($rstype.to_owned()),
-                            ser_code_gen_fn: Box::new(|field_name, ilvl| -> TokenStream {
-                                let field_ident = proc_macro2::Ident::new(
-                                    &format!(
-                                        "{}{}",
-                                        "_".repeat(ilvl as usize),
-                                        field_name.to_case(convert_case::Case::Snake)
-                                    ),
-                                    proc_macro2::Span::call_site(),
-                                );
+                            ser_code_gen_fn: Box::new(|field_name| -> TokenStream {
+                                let field_ident = field_name.to_var_ident();
                                 quote! {buf.$buf_putter(#field_ident);}
                             }),
-                            de_code_gen_fn: Box::new(|_, _| -> TokenStream {
+                            de_code_gen_fn: Box::new(|_| -> TokenStream {
                                 quote! {buf.$buf_getter()}
                             }),
-                            def_code_gen_fn: Box::new(|_, _| -> TokenStream {
+                            def_code_gen_fn: Box::new(|_| -> TokenStream {
                                 quote! {}
                             }),
                         })
@@ -95,15 +88,16 @@ lazy_static::lazy_static!(
 // fn native_u64(ctx: TypeFunctionContext, opts: Option<&Value>) -> GetGenTypeResult {
 //     GetGenTypeResult::Done(Type {
 //         rst: RustType::Simple("u64".to_owned()),
-//         ser_code_gen_fn: Box::new(|field_name, ilvl| -> TokenStream {
-//             let field_ident = proc_macro2::Ident::new(&field_name, proc_macro2::Span::call_site());
+//         ser_code_gen_fn: Box::new(|field_name| -> TokenStream {
+//             let field_ident = field_name.to_var_ident();
 //             quote! {buf.put_u64(#field_ident)}
 //         }),
 //         de_code_gen_fn: Box::new(|field_name| -> TokenStream {
 //             quote! {buf.get_u64()}
 //         }),
 //         def_code_gen_fn: Box::new(|field_name| -> TokenStream {
-//             quote! {}
+//             let type_ident = field_name.to_type_ident();
+//             quote! {pub type #type_ident = u64}
 //         }),
 //     })
 // }

@@ -1,10 +1,8 @@
-use std::rc::Rc;
-
 use serde_json::Value;
 
 use crate::{
-    gen::{FieldName, GetGenTypeResult, Type, TypeFunctionContext},
-    merge::merge,
+    gen::{GetGenTypeResult, Type, TypeFunctionContext},
+    merge::merge_struct,
     pds::val_to_type,
 };
 
@@ -19,7 +17,7 @@ pub fn native_container(
 ) -> GetGenTypeResult {
     if let Some(opts) = opts {
         let json_fields = opts.as_array().unwrap();
-        let mut fields_vec: Vec<(Option<FieldName>, Type)> =
+        let mut fields_vec: Vec<(Option<String>, Type)> =
             Vec::new();
         for field in json_fields {
             let field = field.as_object().unwrap();
@@ -37,11 +35,7 @@ pub fn native_container(
             fields_vec.push((
                 // this doesn't work without doing a manual map for **some** reason
                 // (reason being 'static lifetime)
-                #[allow(clippy::manual_map)]
-                match name {
-                    Some(name) => Some(Box::new(Rc::new(name))),
-                    None => None,
-                },
+                name,
                 match crate::gen::get_gen_type(
                     TypeFunctionContext {
                         pds,
@@ -56,7 +50,7 @@ pub fn native_container(
                 },
             ));
         }
-        GetGenTypeResult::Done(merge(fields_vec))
+        GetGenTypeResult::Done(merge_struct(fields_vec))
     } else {
         GetGenTypeResult::ReExport(Box::new(&native_container))
     }

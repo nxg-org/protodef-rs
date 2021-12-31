@@ -4,8 +4,8 @@ use std::{
     rc::Rc,
 };
 
-use convert_case::Casing;
-use proc_macro2::TokenStream;
+use convert_case::{Case, Casing};
+use proc_macro2::{Ident, Span, TokenStream};
 use serde_json::Value;
 
 pub trait ClonableCasing: Casing + Clone {}
@@ -23,13 +23,62 @@ pub struct TypeFunctionContext<'a> {
 }
 pub type TypeFunction = Box<dyn Fn(TypeFunctionContext, Option<&Value>) -> GetGenTypeResult + Sync>;
 
-pub type FieldName = Box<Rc<dyn convert_case::Casing>>;
-pub type IndentationLevel = usize;
-pub type CodeGenFn = Box<dyn FnOnce(FieldName, IndentationLevel) -> TokenStream>;
+#[derive(Clone, Default)]
+pub struct FieldName(pub Vec<Box<Rc<dyn convert_case::Casing>>>);
 
+impl From<String> for FieldName {
+    fn from(s: String) -> Self {
+        Self(vec![Box::new(Rc::new(s))])
+    }
+}
+
+impl FieldName {
+    pub fn to_var_ident(&self) -> Ident {
+        let ilvl = self.0.len() - 1;
+        let last_elem = self.0.get(ilvl).unwrap();
+        Ident::new(
+            &format!("{}{}", "_".repeat(ilvl), last_elem.to_case(Case::Snake)),
+            Span::call_site(),
+        )
+    }
+    pub fn to_type_ident(&self) -> Ident {
+        Ident::new(
+            &self
+                .0
+                .iter()
+                .map(|a| a.to_case(Case::Pascal))
+                .reduce(|mut a, b| {
+                    a.push('_');
+                    a.push_str(&b);
+                    a
+                })
+                .unwrap(),
+            Span::call_site(),
+        )
+    }
+    pub fn get_ilvl(&self) -> usize {
+        self.0.len()
+    }
+    pub fn to_struct_field(&self) -> String {
+        self.0.last().unwrap().to_case(Case::Snake)
+    }
+    #[must_use]
+    pub fn push(&self, elem: Box<Rc<dyn Casing>>) -> Self {
+        let mut a = self.0.to_vec();
+        a.push(elem);
+        Self(a)
+    }
+}
+
+pub type CodeGenFn = Box<dyn FnOnce(FieldName) -> TokenStream>;
+
+/// the heart piece of code generation
+/// contains all information about the ser, de and def functions
+/// in form of the rusttype field rst
 pub struct Type {
     pub ser_code_gen_fn: CodeGenFn,
     pub de_code_gen_fn: CodeGenFn,
+    /// this should be passed the typename instead of the fieldname
     pub def_code_gen_fn: CodeGenFn,
     pub rst: RustType,
 }

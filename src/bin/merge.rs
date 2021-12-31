@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, rc::Rc};
+use std::{collections::HashMap, path::PathBuf};
 
 use protodef_rs::gen::Type;
 
@@ -52,24 +52,24 @@ fn main() {
         de_code_gen_fn,
         def_code_gen_fn,
         rst,
-    } = protodef_rs::merge::merge(vec![
+    } = protodef_rs::merge::merge_struct(vec![
         // (Some("a".to_owned()), t!(RustType::Simple("u64".to_owned()))),
         // (Some("b".to_owned()), t!(RustType::Simple("u64".to_owned()))),
-        (Some(Box::new(Rc::new("a".to_owned()))), a),
-        (Some(Box::new(Rc::new("b".to_owned()))), b),
+        (Some("a".to_owned()), a),
+        (Some("a".to_owned()), b),
     ]);
 
-    println!("TYPE: {:?}", rst);
+    println!("TYPE: {:#?}", rst);
     println!(
-        "SER_CODE: {}",
-        ser_code_gen_fn(Box::new(Rc::new("INSERT_IDENTIFIER_HERE".to_owned())), 0)
+        "SER_CODE: {:#?}",
+        ser_code_gen_fn("INSERT_IDENTIFIER_HERE".to_owned().into())
     );
     println!(
         "DE_CODE: {}",
-        de_code_gen_fn(Box::new(Rc::new("INSERT_IDENTIFIER_HERE".to_owned())), 0)
+        de_code_gen_fn("INSERT_IDENTIFIER_HERE".to_owned().into())
     );
     println!(
         "DEF_CODE: {}",
-        def_code_gen_fn(Box::new(Rc::new("INSERT_IDENTIFIER_HERE".to_owned())), 0)
+        def_code_gen_fn("INSERT_IDENTIFIER_HERE".to_owned().into())
     );
 }
