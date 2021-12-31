@@ -6,7 +6,7 @@ const PERMITTED_CHARS: [char; 62] = [
     'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '0', '1', '2', '3', '4',
     '5', '6', '7', '8', '9',
 ];
-trait ToIdent {
+pub trait ToIdent {
     fn to_ident(&self) -> proc_macro2::Ident;
 }
 

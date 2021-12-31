@@ -1,37 +1,51 @@
 use std::collections::HashMap;
-pub mod switch;
 pub mod container;
-use crate::native::{switch::native_switch, container::native_container};
+pub mod switch;
+use crate::native::{container::native_container, switch::native_switch};
 
 use super::gen::*;
+use proc_macro2::TokenStream;
 use quote::quote;
 use serde_json::Value;
 
-pub type Natives<'a> = HashMap<&'a str, TypeFunction>;
+pub type Natives = HashMap<String, TypeFunction>;
 
 lazy_static::lazy_static!(
-    pub static ref BUILTIN_NATIVES: Natives<'static> = {
-        let mut ret = <Natives<'static>>::default();
+    pub static ref BUILTIN_NATIVES: Natives = {
+        let mut ret = Natives::default();
 
         macro_rules! simple_natives {
             ($($native_name:expr => $native_fun_name:ident $buf_getter:ident $buf_putter:ident $rstype:expr)+) => {
                 $(
                     fn $native_fun_name(
                         _: TypeFunctionContext,
-                        _: Option<&Value>
+                        opts: Option<&Value>
                     ) -> GetGenTypeResult {
+                        if opts.is_some() {
+                            panic!("you cannot pass arguments to a {}", $rstype)
+                        }
                         GetGenTypeResult::Done(Type {
-                            code_gen_fn: Box::new(|field_name| -> OutCode {
-                                OutCode {
-                                    ser: quote! {buf.$buf_putter(#field_name)},
-                                    de: quote! {buf.$buf_getter();},
-                                    def: quote! {},
-                                }
-                            }),
                             rst: RustType::Simple($rstype.to_owned()),
+                            ser_code_gen_fn: Box::new(|field_name, ilvl| -> TokenStream {
+                                let field_ident = proc_macro2::Ident::new(
+                                    &format!(
+                                        "{}{}",
+                                        "_".repeat(ilvl as usize),
+                                        field_name.to_case(convert_case::Case::Snake)
+                                    ),
+                                    proc_macro2::Span::call_site(),
+                                );
+                                quote! {buf.$buf_putter(#field_ident);}
+                            }),
+                            de_code_gen_fn: Box::new(|_, _| -> TokenStream {
+                                quote! {buf.$buf_getter()}
+                            }),
+                            def_code_gen_fn: Box::new(|_, _| -> TokenStream {
+                                quote! {}
+                            }),
                         })
                     }
-                    ret.insert($rstype, Box::new(&$native_fun_name));
+                    ret.insert($native_name.to_owned(), Box::new(&$native_fun_name));
                 )+
             }
         }
@@ -54,23 +68,43 @@ lazy_static::lazy_static!(
             "boolean" => native_bool get_bool put_bool "bool"
         );
 
-        ret.insert("switch", Box::new(&native_switch));
-        ret.insert("container", Box::new(&native_container));
+        ret.insert("switch".to_owned(), Box::new(&native_switch));
+        ret.insert("container".to_owned(), Box::new(&native_container));
 
         ret
     };
 );
+// fn $native_fun_name(
+//     _: TypeFunctionContext,
+//     _: Option<&Value>
+// ) -> GetGenTypeResult {
+//     GetGenTypeResult::Done(Type {
+//         code_gen_fn: Box::new(|field_name| -> OutCode {
+//             let ident = proc_macro2::Ident::new(&field_name, proc_macro2::Span::call_site());
 
+//             OutCode {
+//                 ser: quote! {buf.$buf_putter(#ident)},
+//                 de: quote! {buf.$buf_getter();},
+//                 def: quote! {},
+//             }
+//         }),
+//         rst: RustType::Simple($rstype.to_owned()),
+//     })
+// }
+// ret.insert($rstype, Box::new(&$native_fun_name));
 // fn native_u64(ctx: TypeFunctionContext, opts: Option<&Value>) -> GetGenTypeResult {
-// GetGenTypeResult::Done(Type {
-// code_gen_fn: Box::new(|field_name| -> OutCode {
-// OutCode {
-// ser: quote! {buf.put_u64(#field_name)},
-// de: quote! {buf.get_u64();},
-// def: quote! {},
+//     GetGenTypeResult::Done(Type {
+//         rst: RustType::Simple("u64".to_owned()),
+//         ser_code_gen_fn: Box::new(|field_name, ilvl| -> TokenStream {
+//             let field_ident = proc_macro2::Ident::new(&field_name, proc_macro2::Span::call_site());
+//             quote! {buf.put_u64(#field_ident)}
+//         }),
+//         de_code_gen_fn: Box::new(|field_name| -> TokenStream {
+//             quote! {buf.get_u64()}
+//         }),
+//         def_code_gen_fn: Box::new(|field_name| -> TokenStream {
+//             quote! {}
+//         }),
+//     })
 // }
-// }),
-// rst: RustType::Simple("u64".to_owned()),
-// })
-// }
-// ret.insert("u64", Box::new(&native_u64));
+// // ret.insert("u64", Box::new(&native_u64));

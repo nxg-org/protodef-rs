@@ -1,10 +1,14 @@
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
+    rc::Rc,
 };
 
+use convert_case::Casing;
 use proc_macro2::TokenStream;
 use serde_json::Value;
+
+pub trait ClonableCasing: Casing + Clone {}
 
 #[derive(Default)]
 pub struct TypeStore {
@@ -19,17 +23,14 @@ pub struct TypeFunctionContext<'a> {
 }
 pub type TypeFunction = Box<dyn Fn(TypeFunctionContext, Option<&Value>) -> GetGenTypeResult + Sync>;
 
-pub type FieldName = String;
-pub type CodeGenFn = Box<dyn FnOnce(FieldName) -> OutCode>;
-
-pub struct OutCode {
-    pub ser: TokenStream,
-    pub de: TokenStream,
-    pub def: TokenStream,
-}
+pub type FieldName = Box<Rc<dyn convert_case::Casing>>;
+pub type IndentationLevel = usize;
+pub type CodeGenFn = Box<dyn FnOnce(FieldName, IndentationLevel) -> TokenStream>;
 
 pub struct Type {
-    pub code_gen_fn: CodeGenFn,
+    pub ser_code_gen_fn: CodeGenFn,
+    pub de_code_gen_fn: CodeGenFn,
+    pub def_code_gen_fn: CodeGenFn,
     pub rst: RustType,
 }
 
@@ -39,7 +40,7 @@ impl std::fmt::Debug for Type {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RustType {
     Struct(HashMap<String, RustType>),
     Enum(Vec<RustType>),
@@ -51,7 +52,9 @@ pub fn resolve_pds_type_ancestors<'ret>(
     ctx_path: &'ret Path,
     type_name: &str,
 ) -> Option<&'ret Path> {
+    // println!("{:?}", pds);
     for ancestor in ctx_path.ancestors() {
+        // println!("{:?}", (ancestor, type_name));
         if pds
             .typemap
             .get(&(ancestor.to_owned(), type_name.to_owned()))
@@ -93,12 +96,15 @@ pub fn get_gen_type(
                 .get(native)
                 .or_else(|| panic!("no native type named \"{}\"", native))
                 .unwrap();
-            Some(f(TypeFunctionContext {
-                path,
-                natives,
-                pds,
-                typestore,
-            }, None))
+            Some(f(
+                TypeFunctionContext {
+                    path,
+                    natives,
+                    pds,
+                    typestore,
+                },
+                None,
+            ))
         }
         crate::pds::Type::Reference(new_name) => {
             let path = resolve_pds_type_ancestors(pds, &path, new_name)

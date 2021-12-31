@@ -1,0 +1,45 @@
+{
+    "types": {
+        "u64": "native",
+        "u8": "native",
+        "container": "native",
+        "varint": "native"
+    },
+    "sub_1": {
+        "types": {
+            "abc": [
+                "container",
+                [
+                    {
+                        "anon": true,
+                        "type": [
+                            "container",
+                            [
+                                {
+                                    "anon": true,
+                                    "type": [
+                                        "container",
+                                        [
+                                            {
+                                                "name": "c",
+                                                "type": "varint"
+                                            }
+                                        ]
+                                    ]
+                                }
+                            ]
+                        ]
+                    },
+                    {
+                        "name": "a",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "b",
+                        "type": "u8"
+                    }
+                ]
+            ]
+        }
+    }
+}

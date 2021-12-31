@@ -49,5 +49,8 @@ pub fn native_switch(ctx: TypeFunctionContext, opts: Option<&Value>) -> GetGenTy
             },
         ));
     }
-    todo!("actual switch implementation")
+
+    todo!("the rest");
+
+    todo!("call merge")
 }
