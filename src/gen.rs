@@ -1,10 +1,11 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, BTreeMap},
     path::{Path, PathBuf},
     rc::Rc,
 };
 
 use convert_case::{Case, Casing};
+use indexmap::IndexMap;
 use proc_macro2::{Ident, Span, TokenStream};
 use serde_json::Value;
 
@@ -78,7 +79,6 @@ pub type CodeGenFn = Box<dyn FnOnce(FieldName) -> TokenStream>;
 pub struct Type {
     pub ser_code_gen_fn: CodeGenFn,
     pub de_code_gen_fn: CodeGenFn,
-    /// this should be passed the typename instead of the fieldname
     pub def_code_gen_fn: CodeGenFn,
     pub rst: RustType,
 }
@@ -89,11 +89,15 @@ impl std::fmt::Debug for Type {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RustType {
-    Struct(HashMap<String, RustType>),
+    Struct(BTreeMap<String, RustType>),
     Enum(Vec<RustType>),
-    Simple(String),
+    Option(Box<RustType>),
+    Vec(Box<RustType>),
+    Array(Box<RustType>, usize),
+    Simple(Ident),
+    None
 }
 
 pub fn resolve_pds_type_ancestors<'ret>(
